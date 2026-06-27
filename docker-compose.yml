@@ -1,0 +1,57 @@
+# Pin the compose project name so it's stable regardless of the folder name.
+# (Without this, Compose derives the project from the directory, so renaming
+# the folder would orphan the old container/network.)
+name: hermes-gateway-docker
+
+services:
+  hermes-gateway:
+    build:
+      context: .
+    image: hermes-gateway:catalina-bridge
+
+    # File ownership on the mounted data dir. The official base image runs as
+    # its own user; if it writes files your host user can't read (or vice
+    # versa), uncomment and set these to your host id -u : id -g. On macOS the
+    # first standard user is usually 501:20 (staff). Leave commented first —
+    # only set it if you hit permission errors on the mounted volume.
+    # user: "${HOST_UID:-501}:${HOST_GID:-20}"
+
+    container_name: hermes-gateway
+    restart: unless-stopped
+
+    environment:
+      # Point Hermes at the MOUNTED data dir (your real ~/.hermes), not the
+      # image's code dir. This is what makes the container share your config,
+      # memory, sessions, and keys.
+      HERMES_HOME: /data
+
+    env_file:
+      # Your existing Hermes secrets file (model/STT keys, platform tokens),
+      # inherited untouched. setup.sh writes HERMES_ENV_FILE into ./.env.
+      - ${HERMES_ENV_FILE}
+
+    volumes:
+      # THE important mount: your existing Hermes data directory on the host.
+      # setup.sh writes HERMES_DATA into ./.env (defaults to your ~/.hermes).
+      # Everything the agent knows lives here and is read/written in place.
+      - ${HERMES_DATA}:/data
+
+    ports:
+      # Hermes webhook adapter (only needed if you later use the generic
+      # webhook platform; harmless to expose on loopback otherwise).
+      - "127.0.0.1:8644:8644"
+      # Local web dashboard (Channels page, pairing, status). Loopback only.
+      - "127.0.0.1:8643:8643"
+
+    # Baileys' dependency RESOLVE allocates a few hundred MB. Give Docker
+    # Desktop's VM enough headroom (Settings -> Resources -> Memory >= 4GB),
+    # and cap the container itself generously.
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+
+    # QR pairing for WhatsApp is interactive. Keep a TTY so `hermes whatsapp`
+    # (run via `docker compose exec`) can draw the QR code.
+    stdin_open: true
+    tty: true
