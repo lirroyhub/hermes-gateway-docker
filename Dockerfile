@@ -31,8 +31,18 @@ ENV PYTHONNOUSERSITE=1 \
 # If you need host-UID file ownership on the mounted volume, prefer the compose
 # `user:` override (see docker-compose.yml) over rebuilding the image.
 
-# Google Calendar / Gmail integrations — baked into the Hermes venv so they
-# survive rebuilds (lazy installs are disabled; runtime pip would not stick).
+# Google Workspace skill dependencies (Gmail / Calendar / Drive / Docs / Sheets
+# / Contacts). The official image usually already has these, but bake them in so
+# a rebuild can't leave the google-workspace skill broken.
+#
+# CRITICAL — install into Hermes's OWN venv (/opt/hermes/.venv), NOT the system
+# python. The skill's setup.py, if run with bare `python3`, targets
+# /usr/bin/python3 — which is PEP 668 "externally managed" AND lacks these libs,
+# producing a *false* "dependency install failed" error. The fix is twofold:
+#   1. install here, into /opt/hermes/.venv (done below), and
+#   2. always run the skill's setup.py with /opt/hermes/.venv/bin/python, e.g.:
+#      docker compose exec hermes-gateway /opt/hermes/.venv/bin/python \
+#        /data/skills/productivity/google-workspace/scripts/setup.py --check
 RUN /usr/local/bin/uv pip install --python /opt/hermes/.venv/bin/python \
     google-api-python-client google-auth-oauthlib google-auth-httplib2
 

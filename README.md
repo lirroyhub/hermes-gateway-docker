@@ -167,6 +167,59 @@ confirms it's running.
 
 ---
 
+## Google Workspace (Gmail / Calendar / Drive) — OAuth setup
+
+The bundled `google-workspace` skill connects Gmail, Calendar, Drive, Docs,
+Sheets, and Contacts via OAuth. Two things make this fiddly in the container,
+both solved here:
+
+**Always run the skill's `setup.py` with Hermes's own Python**, never bare
+`python3`. Bare `python3` is the system interpreter (`/usr/bin/python3`) — PEP
+668 "externally managed" and missing the Google libs — which produces a *false*
+"dependency install failed" error. Use `/opt/hermes/.venv/bin/python`. (The
+Dockerfile pre-installs the Google libs into that venv so they survive rebuilds.)
+
+**The OAuth flow is three SEPARATE commands** — `setup.py` arguments are
+mutually exclusive, so you cannot combine `--client-secret`, `--auth-url`, and
+`--auth-code`. This version also does NOT accept `--services` or `--format`.
+
+Setup, once per Google account (run on the Mac):
+```
+GP=/opt/hermes/.venv/bin/python
+SU=/data/skills/productivity/google-workspace/scripts/setup.py
+
+# 1. Register the client secret JSON (from Google Cloud → OAuth Desktop client).
+#    Keep it under /data so it persists.
+docker compose exec hermes-gateway $GP $SU --client-secret /data/google_client_secret.json
+
+# 2. Generate the auth URL (separate command). Open it in the Mac browser and
+#    authorize. The browser fails on http://localhost:1 after approval —
+#    EXPECTED. Copy the ENTIRE redirected URL from the address bar.
+docker compose exec hermes-gateway $GP $SU --auth-url
+
+# 3. Exchange the pasted URL (quote it — contains & and ?):
+docker compose exec hermes-gateway $GP $SU --auth-code "http://localhost:1/?...code=...&scope=..."
+
+# 4. Verify:
+docker compose exec hermes-gateway $GP $SU --check    # prints AUTHENTICATED
+```
+Token saves to `/data/google_token.json` (persists, auto-refreshes); client
+secret at `/data/google_client_secret.json`. Both on the mounted volume.
+
+The redirect URL from step 2 contains a **live, single-use OAuth code** — treat
+it as private and exchange it promptly (it expires in minutes).
+
+If Google shows **Error 403: access_denied**, your account isn't a test user on
+the Cloud project (app in Testing mode) — add it at Google Cloud Console →
+Audience → Test users.
+
+**Per-profile / multiple accounts.** Each Hermes profile is isolated with its
+own `~/.hermes`, so each gets its own `google_token.json` for a different Google
+account. Repeat the flow per profile (how `setup.py` selects the profile inside
+the container still needs confirming when setting up the 2nd account).
+
+---
+
 ## Important operational notes
 
 - **One gateway at a time.** Each platform (Telegram, etc.) allows only one
