@@ -31,6 +31,11 @@ ENV PYTHONNOUSERSITE=1 \
 # If you need host-UID file ownership on the mounted volume, prefer the compose
 # `user:` override (see docker-compose.yml) over rebuilding the image.
 
+# Google Calendar / Gmail integrations — baked into the Hermes venv so they
+# survive rebuilds (lazy installs are disabled; runtime pip would not stick).
+RUN /usr/local/bin/uv pip install --python /opt/hermes/.venv/bin/python \
+    google-api-python-client google-auth-oauthlib google-auth-httplib2
+
 # The base image's default entrypoint runs the gateway; we make it explicit so
 # behavior is obvious. If the base image already CMDs the gateway this is a
 # no-op; if it drops you into a CLI, this ensures gateway mode.
